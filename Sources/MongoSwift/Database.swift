@@ -76,12 +76,16 @@ public struct CreateCollectionOptions: BsonEncodable {
     /// the database's read concern.
     let readConcern: ReadConcern?
 
+    /// A write concern to set on the returned collection. If one is not specified, it will inherit
+    /// the database's write concern.
+    let writeConcern: WriteConcern?
+
     /// Convenience initializer allowing any/all parameters to be omitted or optional
     public init(autoIndexId: Bool? = nil, capped: Bool? = nil, collation: Document? = nil,
                 indexOptionDefaults: Document? = nil, max: Int64? = nil, readConcern: ReadConcern? = nil,
                 session: ClientSession? = nil, size: Int64? = nil, storageEngine: Document? = nil,
                 validationAction: String? = nil, validationLevel: String? = nil, validator: Document? = nil,
-                viewOn: String? = nil) {
+                viewOn: String? = nil, writeConcern: WriteConcern? = nil) {
         self.autoIndexId = autoIndexId
         self.capped = capped
         self.collation = collation
@@ -95,6 +99,7 @@ public struct CreateCollectionOptions: BsonEncodable {
         self.validationLevel = validationLevel
         self.validator = validator
         self.viewOn = viewOn
+        self.writeConcern = writeConcern
     }
 
     public var skipFields: [String] { return ["readConcern"] }
@@ -104,6 +109,10 @@ public struct CollectionOptions {
     /// A read concern to set on the returned collection. If one is not specified,
     /// the collection will inherit the database's read concern.
     let readConcern: ReadConcern?
+
+    /// A write concern to set on the returned collection. If one is not specified,
+    /// the collection will inherit the database's write concern.
+    let writeConcern: WriteConcern?
 }
 
 // A MongoDB Database
@@ -121,6 +130,13 @@ public class MongoDatabase {
         // per libmongoc docs, we don't need to handle freeing this ourselves
         let readConcern = mongoc_database_get_read_concern(self._database)
         return ReadConcern(readConcern)
+    }
+
+    /// The writeConcern set on this database.
+    public var writeConcern: WriteConcern {
+        // per libmongoc docs, we don't need to handle freeing this ourselves
+        let writeConcern = mongoc_database_get_write_concern(self._database)
+        return WriteConcern(writeConcern)
     }
 
     /**
@@ -168,6 +184,10 @@ public class MongoDatabase {
             mongoc_collection_set_read_concern(collection, rc._readConcern)
         }
 
+        if let wc = options?.writeConcern {
+            mongoc_collection_set_write_concern(collection, wc._writeConcern)
+        }
+
         guard let client = self._client else {
             throw MongoError.invalidClient()
         }
@@ -194,6 +214,10 @@ public class MongoDatabase {
 
         if let rc = options?.readConcern {
             mongoc_collection_set_read_concern(collection, rc._readConcern)
+        }
+
+        if let wc = options?.writeConcern {
+            mongoc_collection_set_write_concern(collection, wc._writeConcern)
         }
 
         guard let client = self._client else {

@@ -12,6 +12,7 @@ public enum MongoError {
     case bsonEncodeError(message: String)
     case typeError(message: String)
     case readConcernError(message: String)
+    case writeConcernError(message: String)
 }
 
 extension MongoError: LocalizedError {

@@ -100,5 +100,91 @@ public class ReadConcern: Equatable, CustomStringConvertible {
         mongoc_read_concern_destroy(readConcern)
         self._readConcern = nil
     }
+}
 
+/// A class to represent a MongoDB write concern.
+public class WriteConcern {
+
+    /// A pointer to a mongoc_write_concern_t
+    internal var _writeConcern: OpaquePointer?
+
+    // Indicates whether to wait for the write operation to get committed to the journal. 
+    public var journal: Bool? {
+        return mongoc_write_concern_get_journal(self._writeConcern)
+    }
+
+    // Specifies the number of nodes that should acknowledge the write. 
+    // MUST be greater than or equal to 0. Only one of this and wTags may be set.
+    public var w: Int32? {
+        return mongoc_write_concern_get_w(self._writeConcern)
+    }
+
+    // Indicates a tag for nodes that should acknowledge the write. Only one of this and w may be set.
+    public var wTag: String? {
+        guard let wTag = mongoc_write_concern_get_wtag(self._writeConcern) else { return nil }
+        return String(cString: wTag)
+    }
+
+    /// If the write concern is not satisfied within this timeout (in milliseconds),
+    /// the operation will return an error. The value MUST be greater than or equal to 0.
+    public var wtimeoutMS: Int32? {
+        return mongoc_write_concern_get_wtimeout(self._writeConcern)
+    }
+
+    /// Initialize a WriteConcern using an Int32 `w` value
+    public init(journal: Bool? = nil, w: Int32? = nil, wtimeoutMS: Int32? = nil) throws {
+        self._writeConcern = mongoc_write_concern_new()
+        self.setJournal(journal)
+        self.setW(w)
+        self.setWTimeoutMS(wtimeoutMS)
+        try self.checkIsValid()
+    }
+
+    /// Initialize a WriteConcern using a String `w` value (`wTag`)
+    public init(journal: Bool? = nil, wTag: String? = nil, wtimeoutMS: Int32? = nil) throws {
+        self._writeConcern = mongoc_write_concern_new()
+        self.setJournal(journal)
+        self.setWTag(wTag)
+        self.setWTimeoutMS(wtimeoutMS)
+        try self.checkIsValid()
+    }
+
+    /// Initializes a new WriteConcern by copying a mongoc_write_concern_t.
+    /// The caller is responsible for freeing the original mongoc_write_concern_t.
+    internal init(_ writeConcern: OpaquePointer?) {
+        self._writeConcern = mongoc_write_concern_copy(writeConcern)
+    }
+
+    /// Sets the journal value on this writeConcern
+    private func setJournal(_ journal: Bool?) {
+        if let journal = journal { mongoc_write_concern_set_journal(self._writeConcern, journal) }
+    }
+
+    /// Sets the wTag value on this writeConcern
+    private func setWTag(_ wTag: String?) {
+        if let wTag = wTag { mongoc_write_concern_set_wtag(self._writeConcern, wTag) }
+    }
+
+    /// Sets the wtimeoutMS value on this writeConcern
+    private func setWTimeoutMS(_ wtimeoutMS: Int32?) {
+        if let wtimeoutMS = wtimeoutMS { mongoc_write_concern_set_wtimeout(self._writeConcern, wtimeoutMS) }
+    }
+
+    /// Sets the w value on this writeConcern
+    private func setW(_ w: Int32?) {
+        if let w = w { mongoc_write_concern_set_w(self._writeConcern, w) }
+    }
+
+    /// Checks if this writeConcern has an invalid combination of options
+    private func checkIsValid() throws {
+        if !mongoc_write_concern_is_valid(self._writeConcern) {
+            throw MongoError.writeConcernError(message: "Invalid combination of WriteConcern options")
+        }
+    }
+
+    deinit {
+        guard let writeConcern = self._writeConcern else { return }
+        mongoc_write_concern_destroy(writeConcern)
+        self._writeConcern = nil
+    }
 }

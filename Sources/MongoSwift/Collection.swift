@@ -497,6 +497,13 @@ public class MongoCollection {
         return ReadConcern(readConcern)
     }
 
+    /// The writeConcern set on this collection.
+    public var writeConcern: WriteConcern {
+        // per libmongoc docs, we don't need to handle freeing this ourselves
+        let writeConcern = mongoc_collection_get_write_concern(self._collection)
+        return WriteConcern(writeConcern)
+    }
+
     /**
         Initializes a new MongoCollection instance, not meant to be instantiated directly
      */
