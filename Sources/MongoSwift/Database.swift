@@ -113,6 +113,11 @@ public struct CollectionOptions {
     /// A write concern to set on the returned collection. If one is not specified,
     /// the collection will inherit the database's write concern.
     let writeConcern: WriteConcern?
+
+    public init(readConcern: ReadConcern? = nil, writeConcern: WriteConcern? = nil) {
+        self.readConcern = readConcern
+        self.writeConcern = writeConcern
+    }
 }
 
 // A MongoDB Database

@@ -222,10 +222,16 @@ public struct InsertOneOptions: BsonEncodable {
     /// If true, allows the write to opt-out of document level validation.
     public let bypassDocumentValidation: Bool?
 
+    /// An optional WriteConcern to use for the command.
+    let writeConcern: WriteConcern?
+
     /// Convenience initializer allowing bypassDocumentValidation to be omitted or optional
-    public init(bypassDocumentValidation: Bool? = nil) {
+    public init(bypassDocumentValidation: Bool? = nil, writeConcern: WriteConcern? = nil) {
         self.bypassDocumentValidation = bypassDocumentValidation
+        self.writeConcern = writeConcern
     }
+
+    public var skipFields: [String] { return ["writeConcern"] }
 }
 
 public struct InsertManyOptions: BsonEncodable {
@@ -237,11 +243,17 @@ public struct InsertManyOptions: BsonEncodable {
     /// Defaults to true.
     public var ordered: Bool = true
 
+    /// An optional WriteConcern to use for the command.
+    let writeConcern: WriteConcern?
+
     /// Convenience initializer allowing any/all parameters to be omitted or optional
-    public init(bypassDocumentValidation: Bool? = nil, ordered: Bool? = true) {
+    public init(bypassDocumentValidation: Bool? = nil, ordered: Bool? = true, writeConcern: WriteConcern? = nil) {
         self.bypassDocumentValidation = bypassDocumentValidation
         if let o = ordered { self.ordered = o }
+        self.writeConcern = writeConcern
     }
+
+    public var skipFields: [String] { return ["writeConcern"] }
 }
 
 public struct UpdateOptions: BsonEncodable {
@@ -257,14 +269,20 @@ public struct UpdateOptions: BsonEncodable {
     /// When true, creates a new document if no document matches the query.
     public let upsert: Bool?
 
+    /// An optional WriteConcern to use for the command.
+    let writeConcern: WriteConcern?
+
     /// Convenience initializer allowing any/all parameters to be optional
     public init(arrayFilters: [Document]? = nil, bypassDocumentValidation: Bool? = nil, collation: Document? = nil,
-                upsert: Bool? = nil) {
+                upsert: Bool? = nil, writeConcern: WriteConcern? = nil) {
         self.arrayFilters = arrayFilters
         self.bypassDocumentValidation = bypassDocumentValidation
         self.collation = collation
         self.upsert = upsert
+        self.writeConcern = writeConcern
     }
+
+    public var skipFields: [String] { return ["writeConcern"] }
 }
 
 public struct ReplaceOptions: BsonEncodable {
@@ -277,22 +295,35 @@ public struct ReplaceOptions: BsonEncodable {
     /// When true, creates a new document if no document matches the query.
     public let upsert: Bool?
 
+    /// An optional WriteConcern to use for the command.
+    let writeConcern: WriteConcern?
+
     /// Convenience initializer allowing any/all parameters to be optional
-    public init(bypassDocumentValidation: Bool? = nil, collation: Document? = nil, upsert: Bool? = nil) {
+    public init(bypassDocumentValidation: Bool? = nil, collation: Document? = nil, upsert: Bool? = nil,
+                writeConcern: WriteConcern? = nil) {
         self.bypassDocumentValidation = bypassDocumentValidation
         self.collation = collation
         self.upsert = upsert
+        self.writeConcern = writeConcern
     }
+
+    public var skipFields: [String] { return ["writeConcern"] }
 }
 
 public struct DeleteOptions: BsonEncodable {
     /// Specifies a collation.
     public let collation: Document?
 
+    /// An optional WriteConcern to use for the command.
+    let writeConcern: WriteConcern?
+
      /// Convenience initializer allowing collation to be omitted or optional
-    public init(collation: Document? = nil) {
+    public init(collation: Document? = nil, writeConcern: WriteConcern? = nil) {
         self.collation = collation
+        self.writeConcern = writeConcern
     }
+
+    public var skipFields: [String] { return ["writeConcern"] }
 }
 
 public struct InsertOneResult {
@@ -665,7 +696,7 @@ public class MongoCollection {
      */
     public func insertOne(_ document: Document, options: InsertOneOptions? = nil) throws -> InsertOneResult? {
         let encoder = BsonEncoder()
-        let opts = try encoder.encode(options)
+        let opts = try WriteConcern.append(options?.writeConcern, to: try encoder.encode(options), callerWC: self.writeConcern)
         var error = bson_error_t()
         if document["_id"] == nil {
             try ObjectId().encode(to: document.data, forKey: "_id")
@@ -689,7 +720,7 @@ public class MongoCollection {
      */
     public func insertMany(_ documents: [Document], options: InsertManyOptions? = nil) throws -> InsertManyResult? {
         let encoder = BsonEncoder()
-        let opts = try encoder.encode(options)
+        let opts = try WriteConcern.append(options?.writeConcern, to: try encoder.encode(options), callerWC: self.writeConcern)
 
         for doc in documents where doc["_id"] == nil {
             try ObjectId().encode(to: doc.data, forKey: "_id")
@@ -717,7 +748,7 @@ public class MongoCollection {
      */
     public func replaceOne(filter: Document, replacement: Document, options: ReplaceOptions? = nil) throws -> UpdateResult? {
         let encoder = BsonEncoder()
-        let opts = try encoder.encode(options)
+        let opts = try WriteConcern.append(options?.writeConcern, to: try encoder.encode(options), callerWC: self.writeConcern)
         let reply = Document()
         var error = bson_error_t()
         if !mongoc_collection_replace_one(
@@ -740,7 +771,7 @@ public class MongoCollection {
      */
     public func updateOne(filter: Document, update: Document, options: UpdateOptions? = nil) throws -> UpdateResult? {
         let encoder = BsonEncoder()
-        let opts = try encoder.encode(options)
+        let opts = try WriteConcern.append(options?.writeConcern, to: try encoder.encode(options), callerWC: self.writeConcern)
         let reply = Document()
         var error = bson_error_t()
         if !mongoc_collection_update_one(
@@ -763,7 +794,7 @@ public class MongoCollection {
      */
     public func updateMany(filter: Document, update: Document, options: UpdateOptions? = nil) throws -> UpdateResult? {
         let encoder = BsonEncoder()
-        let opts = try encoder.encode(options)
+        let opts = try WriteConcern.append(options?.writeConcern, to: try encoder.encode(options), callerWC: self.writeConcern)
         let reply = Document()
         var error = bson_error_t()
         if !mongoc_collection_update_many(
@@ -785,7 +816,7 @@ public class MongoCollection {
      */
     public func deleteOne(_ filter: Document, options: DeleteOptions? = nil) throws -> DeleteResult? {
         let encoder = BsonEncoder()
-        let opts = try encoder.encode(options)
+        let opts = try WriteConcern.append(options?.writeConcern, to: try encoder.encode(options), callerWC: self.writeConcern)
         let reply = Document()
         var error = bson_error_t()
         if !mongoc_collection_delete_one(
@@ -807,7 +838,7 @@ public class MongoCollection {
      */
     public func deleteMany(_ filter: Document, options: DeleteOptions? = nil) throws -> DeleteResult? {
         let encoder = BsonEncoder()
-        let opts = try encoder.encode(options)
+        let opts = try WriteConcern.append(options?.writeConcern, to: try encoder.encode(options), callerWC: self.writeConcern)
         let reply = Document()
         var error = bson_error_t()
         if !mongoc_collection_delete_many(

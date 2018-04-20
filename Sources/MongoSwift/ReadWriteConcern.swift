@@ -103,7 +103,7 @@ public class ReadConcern: Equatable, CustomStringConvertible {
 }
 
 /// A class to represent a MongoDB write concern.
-public class WriteConcern {
+public class WriteConcern: Equatable, CustomStringConvertible {
 
     /// A pointer to a mongoc_write_concern_t
     internal var _writeConcern: OpaquePointer?
@@ -131,6 +131,31 @@ public class WriteConcern {
         return mongoc_write_concern_get_wtimeout(self._writeConcern)
     }
 
+    /// Indicates whether this is an acknowledged write concern.
+    public var isAcknowledged: Bool {
+        return mongoc_write_concern_is_acknowledged(self._writeConcern)
+    }
+
+    /// Indicates whether this is the default write concern.
+    public var isDefault: Bool {
+        return mongoc_write_concern_is_default(self._writeConcern)
+    }
+
+    private var asDocument: Document {
+        let doc = Document()
+        try? self.append(to: doc)
+        return doc
+    }
+
+    public var description: String {
+        return self.asDocument.description
+    }
+
+    /// Initializes a new, empty WriteConcern
+    public init() {
+        self._writeConcern = mongoc_write_concern_new()
+    }
+
     /// Initialize a WriteConcern using an Int32 `w` value
     public init(journal: Bool? = nil, w: Int32? = nil, wtimeoutMS: Int32? = nil) throws {
         self._writeConcern = mongoc_write_concern_new()
@@ -156,30 +181,59 @@ public class WriteConcern {
     }
 
     /// Sets the journal value on this writeConcern
-    private func setJournal(_ journal: Bool?) {
+    internal func setJournal(_ journal: Bool?) {
         if let journal = journal { mongoc_write_concern_set_journal(self._writeConcern, journal) }
     }
 
     /// Sets the wTag value on this writeConcern
-    private func setWTag(_ wTag: String?) {
+    internal func setWTag(_ wTag: String?) {
         if let wTag = wTag { mongoc_write_concern_set_wtag(self._writeConcern, wTag) }
     }
 
     /// Sets the wtimeoutMS value on this writeConcern
-    private func setWTimeoutMS(_ wtimeoutMS: Int32?) {
+    internal func setWTimeoutMS(_ wtimeoutMS: Int32?) {
         if let wtimeoutMS = wtimeoutMS { mongoc_write_concern_set_wtimeout(self._writeConcern, wtimeoutMS) }
     }
 
     /// Sets the w value on this writeConcern
-    private func setW(_ w: Int32?) {
+    internal func setW(_ w: Int32?) {
         if let w = w { mongoc_write_concern_set_w(self._writeConcern, w) }
     }
 
     /// Checks if this writeConcern has an invalid combination of options
-    private func checkIsValid() throws {
+    internal func checkIsValid() throws {
         if !mongoc_write_concern_is_valid(self._writeConcern) {
             throw MongoError.writeConcernError(message: "Invalid combination of WriteConcern options")
         }
+    }
+
+    /// Appends this writeConcern to a Document.
+    internal func append(to doc: Document) throws {
+        if !mongoc_write_concern_append(self._writeConcern, doc.data) {
+            throw MongoError.writeConcernError(message: "Error appending WriteConcern to document \(doc)")
+        }
+    }
+
+    /// Since we have to follow certain rules about whether to include or omit a WriteConcern,
+    /// this function handles obeying those, factoring in the WriteConcern, if any, for
+    /// whatever object is calling this function. It returns a final options Document for the
+    /// calling function to use, or nil if the Document ends up being empty.
+    internal static func append(_ writeConcern: WriteConcern?, to opts: Document?, callerWC: WriteConcern) throws -> Document? {
+        // if the user didn't specify a writeConcern, then we just want to use
+        // whatever the default is for the caller. 
+        guard let wc = writeConcern else { return opts }
+
+        // the caller is using the server's default WC and we are also using default, don't append anything
+        if callerWC.isDefault && wc.isDefault { return opts }
+
+        // otherwise either us or the caller is using a non-default, so we need to append it
+        let output = opts ?? Document() // create base opts if they don't exist
+        try wc.append(to: output)
+        return output
+    }
+
+    public static func == (lhs: WriteConcern, rhs: WriteConcern) -> Bool {
+        return lhs.asDocument == rhs.asDocument
     }
 
     deinit {

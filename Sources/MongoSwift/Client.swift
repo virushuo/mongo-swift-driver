@@ -58,6 +58,11 @@ public struct DatabaseOptions {
     /// A write concern to set on the retrieved database. If one is not specified,
     /// the database will inherit the client's write concern. 
     let writeConcern: WriteConcern?
+
+    public init(readConcern: ReadConcern? = nil, writeConcern: WriteConcern? = nil) {
+        self.readConcern = readConcern
+        self.writeConcern = writeConcern
+    }
 }
 
 // A MongoDB Client
