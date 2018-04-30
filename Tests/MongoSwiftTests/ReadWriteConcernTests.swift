@@ -10,6 +10,7 @@ extension WriteConcern {
         let wtag = doc["w"] as? String
         let w = doc["w"] as? Int
 
+        // can be stored under either "j" or "journal"
         var jToUse: Bool? = nil
         if let j = doc["journal"] as? Bool {
             jToUse = j
@@ -17,6 +18,7 @@ extension WriteConcern {
             jToUse = j
         }
 
+        // can be stored under either "wtimeout" or "wtimeoutMS"
         var wtToUse: Int32? = nil
         if let wt = doc["wtimeoutMS"] as? Int {
             wtToUse = Int32(wt)
