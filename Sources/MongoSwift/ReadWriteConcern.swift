@@ -181,34 +181,34 @@ public class WriteConcern: Equatable, CustomStringConvertible {
     }
 
     /// Sets the journal value on this writeConcern
-    internal func setJournal(_ journal: Bool?) {
+    private func setJournal(_ journal: Bool?) {
         if let journal = journal { mongoc_write_concern_set_journal(self._writeConcern, journal) }
     }
 
     /// Sets the wTag value on this writeConcern
-    internal func setWTag(_ wTag: String?) {
+    private func setWTag(_ wTag: String?) {
         if let wTag = wTag { mongoc_write_concern_set_wtag(self._writeConcern, wTag) }
     }
 
     /// Sets the wtimeoutMS value on this writeConcern
-    internal func setWTimeoutMS(_ wtimeoutMS: Int32?) {
+    private func setWTimeoutMS(_ wtimeoutMS: Int32?) {
         if let wtimeoutMS = wtimeoutMS { mongoc_write_concern_set_wtimeout(self._writeConcern, wtimeoutMS) }
     }
 
     /// Sets the w value on this writeConcern
-    internal func setW(_ w: Int32?) {
+    private func setW(_ w: Int32?) {
         if let w = w { mongoc_write_concern_set_w(self._writeConcern, w) }
     }
 
     /// Checks if this writeConcern has an invalid combination of options
-    internal func checkIsValid() throws {
+    private func checkIsValid() throws {
         if !mongoc_write_concern_is_valid(self._writeConcern) {
             throw MongoError.writeConcernError(message: "Invalid combination of WriteConcern options")
         }
     }
 
     /// Appends this writeConcern to a Document.
-    internal func append(to doc: Document) throws {
+    private func append(to doc: Document) throws {
         if !mongoc_write_concern_append(self._writeConcern, doc.data) {
             throw MongoError.writeConcernError(message: "Error appending WriteConcern to document \(doc)")
         }
