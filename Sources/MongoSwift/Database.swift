@@ -7,13 +7,18 @@ public struct RunCommandOptions: BsonEncodable {
     /// An optional ReadConcern to use for this operation
     let readConcern: ReadConcern?
 
+    /// An optional WriteConcern to use for this operation
+    let writeConcern: WriteConcern?
+
     /// Convenience initializer allowing session to be omitted or optional
-    public init(readConcern: ReadConcern? = nil, session: ClientSession? = nil) {
+    public init(readConcern: ReadConcern? = nil, session: ClientSession? = nil,
+                writeConcern: WriteConcern? = nil) {
         self.readConcern = readConcern
         self.session = session
+        self.writeConcern = writeConcern
     }
 
-    public var skipFields: [String] { return ["readConcern"] }
+    public var skipFields: [String] { return ["readConcern", "writeConcern"] }
 }
 
 public struct ListCollectionsOptions: BsonEncodable {
@@ -102,7 +107,7 @@ public struct CreateCollectionOptions: BsonEncodable {
         self.writeConcern = writeConcern
     }
 
-    public var skipFields: [String] { return ["readConcern"] }
+    public var skipFields: [String] { return ["readConcern", "writeConcern"] }
 }
 
 public struct CollectionOptions {
@@ -263,10 +268,11 @@ public class MongoDatabase {
      */
     public func runCommand(_ command: Document, options: RunCommandOptions? = nil) throws -> Document {
         let encoder = BsonEncoder()
-        let opts = try ReadConcern.append(options?.readConcern, to: try encoder.encode(options), callerRC: self.readConcern)
+        let withRC = try ReadConcern.append(options?.readConcern, to: try encoder.encode(options), callerRC: self.readConcern)
+        let withWC = try WriteConcern.append(options?.writeConcern, to: withRC, callerWC: self.writeConcern)
         let reply = Document()
         var error = bson_error_t()
-        if !mongoc_database_command_with_opts(self._database, command.data, nil, opts?.data, reply.data, &error) {
+        if !mongoc_database_command_with_opts(self._database, command.data, nil, withWC?.data, reply.data, &error) {
             throw MongoError.commandError(message: toErrorString(error))
         }
         return reply

@@ -25,13 +25,16 @@ public struct AggregateOptions: BsonEncodable {
     /// The index to use for the aggregation. The hint does not apply to $lookup and $graphLookup stages.
     // let hint: Optional<(String | Document)>
 
-    /// A ReadConcern to use for this operation. 
+    /// A ReadConcern to use in read stages of this operation. 
     let readConcern: ReadConcern?
+
+    /// A WriteConcern to use in $out stages of this operation.
+    let writeConcern: WriteConcern?
 
     /// Convenience initializer allowing any/all parameters to be optional
     public init(allowDiskUse: Bool? = nil, batchSize: Int32? = nil, bypassDocumentValidation: Bool? = nil,
                 collation: Document? = nil, comment: String? = nil, maxTimeMS: Int64? = nil,
-                readConcern: ReadConcern? = nil) {
+                readConcern: ReadConcern? = nil, writeConcern: WriteConcern? = nil) {
         self.allowDiskUse = allowDiskUse
         self.batchSize = batchSize
         self.bypassDocumentValidation = bypassDocumentValidation
@@ -39,9 +42,10 @@ public struct AggregateOptions: BsonEncodable {
         self.comment = comment
         self.maxTimeMS = maxTimeMS
         self.readConcern = readConcern
+        self.writeConcern = writeConcern
     }
 
-    public var skipFields: [String] { return ["readConcern"] }
+    public var skipFields: [String] { return ["readConcern", "writeConcern"] }
 }
 
 public struct CountOptions: BsonEncodable {
@@ -511,6 +515,16 @@ public struct IndexOptions: BsonEncodable {
     }
 }
 
+public struct CreateIndexOptions {
+    /// An optional WriteConcern to use for the command
+    let writeConcern: WriteConcern?
+}
+
+public struct DropIndexOptions {
+    /// An optional WriteConcern to use for the command
+    let writeConcern: WriteConcern?
+}
+
 // A MongoDB Collection
 public class MongoCollection {
     private var _collection: OpaquePointer?
@@ -597,10 +611,11 @@ public class MongoCollection {
      */
     public func aggregate(_ pipeline: [Document], options: AggregateOptions? = nil) throws -> MongoCursor {
         let encoder = BsonEncoder()
-        let opts = try ReadConcern.append(options?.readConcern, to: try encoder.encode(options), callerRC: self.readConcern)
+        let withRC = try ReadConcern.append(options?.readConcern, to: try encoder.encode(options), callerRC: self.readConcern)
+        let withWC = try WriteConcern.append(options?.writeConcern, to: withRC, callerWC: self.writeConcern)
         let pipeline: Document = ["pipeline": pipeline]
         guard let cursor = mongoc_collection_aggregate(
-            self._collection, MONGOC_QUERY_NONE, pipeline.data, opts?.data, nil) else {
+            self._collection, MONGOC_QUERY_NONE, pipeline.data, withWC?.data, nil) else {
             throw MongoError.invalidResponse()
         }
         guard let client = self._client else {
@@ -853,11 +868,12 @@ public class MongoCollection {
      *
      * - Parameters:
      *   - model: An `IndexModel` representing the keys and options for the index
+     *   - writeConcern: Optional WriteConcern to use for the command
      *
      * - Returns: The name of the created index
      */
-    public func createIndex(_ forModel: IndexModel) throws -> String {
-        return try createIndexes([forModel])[0]
+    public func createIndex(_ forModel: IndexModel, options: CreateIndexOptions? = nil) throws -> String {
+        return try createIndexes([forModel], options: options)[0]
     }
 
     /**
@@ -866,11 +882,13 @@ public class MongoCollection {
      * - Parameters:
      *   - keys: The keys for the index
      *   - options: Optional settings
+     *   - writeConcern: Optional WriteConcern to use for the command
      *
      * - Returns: The name of the created index
      */
-    public func createIndex(_ keys: Document, options: IndexOptions? = nil) throws -> String {
-        return try createIndex(IndexModel(keys: keys, options: options))
+    public func createIndex(_ keys: Document, options: IndexOptions? = nil,
+                            commandOptions: CreateIndexOptions? = nil) throws -> String {
+        return try createIndex(IndexModel(keys: keys, options: options), options: commandOptions)
     }
 
     /**
@@ -878,17 +896,19 @@ public class MongoCollection {
      *
      * - Parameters:
      *   - models: An array of `IndexModel` specifying the indexes to create
+     *   - writeConcern: Optional WriteConcern to use for the command
      *
      * - Returns: The names of all the indexes that were created
      */
-    public func createIndexes(_ forModels: [IndexModel]) throws -> [String] {
+    public func createIndexes(_ forModels: [IndexModel], options: CreateIndexOptions? = nil) throws -> [String] {
         let collName = String(cString: mongoc_collection_get_name(self._collection))
         let command: Document = [
             "createIndexes": collName,
             "indexes": try forModels.map { try BsonEncoder().encode($0) }
         ]
         var error = bson_error_t()
-        if !mongoc_collection_write_command_with_opts(self._collection, command.data, nil, nil, &error) {
+        let opts = try WriteConcern.append(options?.writeConcern, to: nil, callerWC: self.writeConcern)
+        if !mongoc_collection_write_command_with_opts(self._collection, command.data, opts?.data, nil, &error) {
             throw MongoError.commandError(message: toErrorString(error))
         }
 
@@ -900,11 +920,13 @@ public class MongoCollection {
      *
      * - Parameters:
      *   - name: The name of the index to drop
+     *   - writeConcern: An optional WriteConcern to use for the command
      *
      */
-    public func dropIndex(_ name: String) throws {
+    public func dropIndex(_ name: String, options: DropIndexOptions? = nil) throws {
         var error = bson_error_t()
-        if !mongoc_collection_drop_index(self._collection, name, &error) {
+        let opts = try WriteConcern.append(options?.writeConcern, to: nil, callerWC: self.writeConcern)
+        if !mongoc_collection_drop_index_with_opts(self._collection, name, opts?.data, &error) {
             throw MongoError.commandError(message: toErrorString(error))
         }
     }
@@ -914,12 +936,14 @@ public class MongoCollection {
      *
      * - Parameters:
      *   - keys: The keys for the index
-     *   - options: Optional settings
+     *   - options: Optional settings to look for on the index to drop
+     *   - writeConcern: An optional WriteConcern to use for the command
      *
      * - Returns: The result of the command returned from the server
      */
-    public func dropIndex(_ keys: Document, options: IndexOptions? = nil) throws -> Document {
-        return try dropIndex(IndexModel(keys: keys, options: options))
+    public func dropIndex(_ keys: Document, options: IndexOptions? = nil,
+                            commandOptions: DropIndexOptions? = nil) throws -> Document {
+        return try dropIndex(IndexModel(keys: keys, options: options), options: commandOptions)
     }
 
     /**
@@ -927,31 +951,35 @@ public class MongoCollection {
      *
      * - Parameters:
      *   - model: The model describing the index to drop
+     *   - writeConcern: An optional WriteConcern to use for the command
      *
      * - Returns: The result of the command returned from the server
      */
-    public func dropIndex(_ model: IndexModel) throws -> Document {
-        return try _dropIndexes(keys: model.keys)
+    public func dropIndex(_ model: IndexModel, options: DropIndexOptions? = nil) throws -> Document {
+        return try _dropIndexes(keys: model.keys, options: options)
     }
 
     /**
      * Drops all indexes in the collection
+     * 
+     * - Parameters:
+    *   - writeConcern: An optional WriteConcern to use for the command
      *
      * - Returns: The result of the command returned from the server
      */
-    public func dropIndexes() throws -> Document {
-        return try _dropIndexes()
+    public func dropIndexes(options: DropIndexOptions? = nil) throws -> Document {
+        return try _dropIndexes(options: options)
     }
 
-    private func _dropIndexes(keys: Document? = nil) throws -> Document {
+    private func _dropIndexes(keys: Document? = nil, options: DropIndexOptions? = nil) throws -> Document {
         let collName = String(cString: mongoc_collection_get_name(self._collection))
         let command: Document = ["dropIndexes": collName, "index": keys ?? "*"]
         let reply = Document()
         var error = bson_error_t()
-        if !mongoc_collection_write_command_with_opts(self._collection, command.data, nil, reply.data, &error) {
+        let opts = try WriteConcern.append(options?.writeConcern, to: nil, callerWC: self.writeConcern)
+        if !mongoc_collection_write_command_with_opts(self._collection, command.data, opts?.data, reply.data, &error) {
             throw MongoError.commandError(message: toErrorString(error))
         }
-
         return reply
     }
 

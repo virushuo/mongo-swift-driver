@@ -67,7 +67,7 @@ public class ReadConcern: Equatable, CustomStringConvertible {
     }
 
     /// Appends this readConcern to a Document.
-    internal func append(to doc: Document) throws {
+    private func append(to doc: Document) throws {
         if !mongoc_read_concern_append(self._readConcern, doc.data) {
             throw MongoError.readConcernError(message: "Error appending readconcern to document \(doc)")
         }
@@ -156,19 +156,15 @@ public class WriteConcern: Equatable, CustomStringConvertible {
         self._writeConcern = mongoc_write_concern_new()
     }
 
-    /// Initialize a WriteConcern using an Int32 `w` value
-    public init(journal: Bool? = nil, w: Int32? = nil, wtimeoutMS: Int32? = nil) throws {
+    /// Initializes a WriteConcern. Only one of w and wTag should be provided. If both are,
+    /// an error will be thrown.
+    public init(journal: Bool? = nil, w: Int32? = nil, wTag: String? = nil, wtimeoutMS: Int32? = nil) throws {
+        if w != nil && wTag != nil {
+            throw MongoError.writeConcernError(message: "Only one of w and wTag may be specified")
+        }
         self._writeConcern = mongoc_write_concern_new()
         self.setJournal(journal)
         self.setW(w)
-        self.setWTimeoutMS(wtimeoutMS)
-        try self.checkIsValid()
-    }
-
-    /// Initialize a WriteConcern using a String `w` value (`wTag`)
-    public init(journal: Bool? = nil, wTag: String? = nil, wtimeoutMS: Int32? = nil) throws {
-        self._writeConcern = mongoc_write_concern_new()
-        self.setJournal(journal)
         self.setWTag(wTag)
         self.setWTimeoutMS(wtimeoutMS)
         try self.checkIsValid()

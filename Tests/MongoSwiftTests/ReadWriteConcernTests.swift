@@ -80,6 +80,7 @@ final class ReadWriteConcernTests: XCTestCase {
         expect(try WriteConcern(w: 3)).toNot(throwError())
         expect(try WriteConcern(journal: true, w: 1)).toNot(throwError())
         expect(try WriteConcern(w: 0, wtimeoutMS: 1000)).toNot(throwError())
+        expect(try WriteConcern(wTag: "hi")).toNot(throwError())
 
         // verify that we throw on invalid option combination
         expect(try WriteConcern(journal: true, w: 0)).to(throwError())
@@ -261,7 +262,7 @@ final class ReadWriteConcernTests: XCTestCase {
     	// setup a collection 
     	let client = try MongoClient()
     	let db = try client.db("test")
-    	defer { do { try db.drop() } catch {} }
+    	defer { try? db.drop() }
     	let coll = try db.createCollection("coll1")
 
     	let command: Document = ["count": "coll1"]
@@ -293,7 +294,64 @@ final class ReadWriteConcernTests: XCTestCase {
     }
 
     func testOperationWriteConcerns() throws {
+        let client = try MongoClient()
+        let db = try client.db("test")
+        defer { try? db.drop() }
 
+        var counter = 0
+        func nextDoc() -> Document {
+            defer { counter += 1 }
+            return ["x": counter]
+        }
+
+        let coll = try db.createCollection("coll1")
+        let wc1 = try WriteConcern(w: 1)
+        let wc2 =  WriteConcern()
+        let wc3 = try WriteConcern(journal: true)
+
+        let command: Document = ["insert": "coll1", "documents": [nextDoc()] as [Document]]
+
+        // run command with a valid writeConcern
+        let options1 = RunCommandOptions(writeConcern: wc1)
+        let res1 = try db.runCommand(command, options: options1)
+        expect(res1["ok"] as? Double).to(equal(1.0))
+
+        // run command with an empty writeConcern
+        let options2 = RunCommandOptions(writeConcern: wc2)
+        let res2 = try db.runCommand(command, options: options2)
+        expect(res2["ok"] as? Double).to(equal(1.0))
+
+        expect(try coll.insertOne(nextDoc(), options: InsertOneOptions(writeConcern: wc1))).toNot(throwError())
+        expect(try coll.insertOne(nextDoc(), options: InsertOneOptions(writeConcern: wc3))).toNot(throwError())
+
+        expect(try coll.insertMany([nextDoc(), nextDoc()], options: InsertManyOptions(writeConcern: wc1))).toNot(throwError())
+        expect(try coll.insertMany([nextDoc(), nextDoc()], options: InsertManyOptions(writeConcern: wc3))).toNot(throwError())
+
+        expect(try coll.updateOne(filter: ["x": 1], update: ["$set": nextDoc()], options: UpdateOptions(writeConcern: wc2))).toNot(throwError())
+        expect(try coll.updateOne(filter: ["x": 2], update: ["$set": nextDoc()], options: UpdateOptions(writeConcern: wc3))).toNot(throwError())
+
+        expect(try coll.updateMany(filter: ["x": 3], update: ["$set": nextDoc()], options: UpdateOptions(writeConcern: wc2))).toNot(throwError())
+        expect(try coll.updateMany(filter: ["x": 4], update: ["$set": nextDoc()], options: UpdateOptions(writeConcern: wc3))).toNot(throwError())
+
+        let coll2 = try db.createCollection("coll2")
+        defer { try? coll2.drop() }
+        let pipeline: [Document] = [["$out": "test.coll2"]]
+        expect(try coll.aggregate(pipeline, options: AggregateOptions(writeConcern: wc1))).toNot(throwError())
+
+        expect(try coll.replaceOne(filter: ["x": 5], replacement: nextDoc(), options: ReplaceOptions(writeConcern: wc1))).toNot(throwError())
+        expect(try coll.replaceOne(filter: ["x": 6], replacement: nextDoc(), options: ReplaceOptions(writeConcern: wc3))).toNot(throwError())
+
+        expect(try coll.deleteOne(["x": 7], options: DeleteOptions(writeConcern: wc1))).toNot(throwError())
+        expect(try coll.deleteOne(["x": 8], options: DeleteOptions(writeConcern: wc3))).toNot(throwError())
+
+        expect(try coll.deleteMany(["x": 9], options: DeleteOptions(writeConcern: wc1))).toNot(throwError())
+        expect(try coll.deleteMany(["x": 10], options: DeleteOptions(writeConcern: wc3))).toNot(throwError())
+
+        expect(try coll.createIndex(["x": 1], commandOptions: CreateIndexOptions(writeConcern: wc1))).toNot(throwError())
+        expect(try coll.createIndexes([IndexModel(keys: ["x": -1])], options: CreateIndexOptions(writeConcern: wc3))).toNot(throwError())
+
+        expect(try coll.dropIndex(["x": 1], commandOptions: DropIndexOptions(writeConcern: wc1))).toNot(throwError())
+        expect(try coll.dropIndexes(options: DropIndexOptions(writeConcern: wc3))).toNot(throwError())
     }
 
     func testConnectionStrings() throws {
