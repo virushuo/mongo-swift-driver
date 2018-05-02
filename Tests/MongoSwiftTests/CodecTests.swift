@@ -163,8 +163,7 @@ final class CodecTests: XCTestCase {
         // print(res1)
 
         let i: Int = 42
-        let bv = i as! BsonValue
-        let f = Float(from: bv)
+        let f = Float(from: i)
         print(f)
     }
 }
