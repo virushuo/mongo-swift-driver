@@ -157,7 +157,12 @@ extension _BsonDecoder {
         guard let unwrapped = value else {
             throw DecodingError._typeMismatch(at: self.codingPath, expectation: type, reality: value)
         }
-        return try T(from: unwrapped)
+
+        guard let primitive = T(from: unwrapped) else {
+            throw DecodingError._numberMismatch(at: self.codingPath, expectation: type, reality: value)
+        }
+
+        return primitive
     }
 
     fileprivate func unbox<T: Decodable>(_ value: BsonValue?, as type: T.Type) throws -> T? {
@@ -523,5 +528,12 @@ private extension DecodingError {
     static func _typeMismatch(at path: [CodingKey], expectation: Any.Type, reality: BsonValue?) -> DecodingError {
         let description = "Expected to decode \(expectation) but found \(type(of: reality)) instead."
         return .typeMismatch(expectation, Context(codingPath: path, debugDescription: description))
+    }
+
+    static func _numberMismatch(at path: [CodingKey], expectation: Any.Type, reality: BsonValue?) -> DecodingError {
+        let description = "Expected to find a value that can be represented as a \(expectation), " +
+                         "but found value \(String(describing: reality)) of type \(type(of: reality)) instead."
+        return .typeMismatch(expectation, Context(codingPath: path, debugDescription: description))
+
     }
 }

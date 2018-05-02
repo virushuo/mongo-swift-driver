@@ -10,6 +10,7 @@ public enum MongoError {
     case commandError(message: String)
     case bsonParseError(domain: UInt32, code: UInt32, message: String)
     case bsonEncodeError(message: String)
+    case bsonDecodeError(message: String)
     case typeError(message: String)
 }
 
@@ -19,7 +20,7 @@ extension MongoError: LocalizedError {
         case let .invalidUri(message), let .invalidCursor(message),
             let .invalidCollection(message), let .commandError(message),
             let .bsonParseError(_, _, message), let .bsonEncodeError(message),
-            let .typeError(message):
+            let .bsonDecodeError(message), let .typeError(message):
             return message
         default:
             return nil

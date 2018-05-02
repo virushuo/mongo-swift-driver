@@ -134,4 +134,37 @@ final class CodecTests: XCTestCase {
         let res3 = try decoder.decode(OptionalsStruct.self, from: s2Doc2)
         expect(res3).to(equal(s2))
     }
+
+    struct Numbers: Decodable, Equatable {
+        // let int8: Int8
+        // let int16: Int16
+        // let uint8: UInt8
+        // let uint16: UInt16
+        // let uint32: UInt32
+        // let uint64: UInt64
+        // let uint: UInt
+        let float: Float
+    }
+
+    /// Test decoding where the requested numeric types are non-BSON
+    /// and require conversions.
+    func testDecodingNonBsonNumbers() throws {
+        //let decoder = BsonDecoder()
+
+        // the struct we expect to get back
+        //let s = Numbers(int8: 42, int16: 42, uint8: 42, uint16: 42, uint32: 42, uint64: 42, uint: 42, float: 42)
+
+        // store all values as Int32s and decode them to their requested types
+        //let doc1: Document = ["int8": 42, "int16": 42, "uint8": 42, "uint16": 42, "uint32": 42, "uint64": 42, "uint": 42, "float": 42]
+
+        // let doc1: Document = ["float": 42]
+
+        // let res1 = try decoder.decode(Numbers.self, from: doc1)
+        // print(res1)
+
+        let i: Int = 42
+        let bv = i as! BsonValue
+        let f = Float(from: bv)
+        print(f)
+    }
 }
